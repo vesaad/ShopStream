@@ -8,7 +8,7 @@ GO
 USE ShopStreamDB;
 GO
  
- 
+
 -- USERS TABLE
 CREATE TABLE users (
     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -19,6 +19,7 @@ CREATE TABLE users (
     updated_at DATETIME DEFAULT GETDATE()
 );
 GO
+
 
 -- ORDERS TABLE
 CREATE TABLE orders (
