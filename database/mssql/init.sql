@@ -7,7 +7,8 @@ GO
 
 USE ShopStreamDB;
 GO
-
+ 
+ 
 -- USERS TABLE
 CREATE TABLE users (
     id INT IDENTITY(1,1) PRIMARY KEY,
