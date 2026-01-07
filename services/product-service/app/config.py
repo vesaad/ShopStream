@@ -8,7 +8,8 @@ class Settings(BaseSettings):
     DB_NAME: str = "ShopStreamDB"
     
     # Kafka
-    KAFKA_BROKER: str = "localhost:9092"
+    KAFKA_BROKER: str = "kafka:29092"
+
     
     # Service
     SERVICE_NAME: str = "product-service"
