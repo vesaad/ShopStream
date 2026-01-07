@@ -93,7 +93,7 @@ services:
     env_file:
       - ./services/order-service/.env
     ports:
-      - "8001:8001"
+      - "8003:8003"
     networks:
       - shopstream-network
 
@@ -123,7 +123,7 @@ services:
       kafka:
         condition: service_started
     ports:
-      - "8003:8003"
+      - "8001:8001"
     networks:
       - shopstream-network
 
