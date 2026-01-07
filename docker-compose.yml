@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # MS SQL Server - Relational Database
@@ -17,11 +17,6 @@ services:
       - ./database/mssql:/docker-entrypoint-initdb.d
     networks:
       - shopstream-network
-    healthcheck:
-      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P 'YourStrong@Passw0rd' -Q 'SELECT 1'
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   # MongoDB - NoSQL Database
   mongodb:
