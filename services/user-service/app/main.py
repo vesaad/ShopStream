@@ -1,9 +1,10 @@
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
 from app.models import UserRegister, UserLogin, UserResponse, TokenResponse
 from app.database import db
 from app.auth import hash_password, verify_password, create_access_token, verify_token
-from app.kafka_producer import event_producer
+from app.kafka_producer import event_producer  # ✅ FIX: event_producer jo EventProducer
 
 app = FastAPI(
     title="User Service",
@@ -46,7 +47,7 @@ def register_user(user: UserRegister):
                 """
                 INSERT INTO users (username, email, password_hash)
                 OUTPUT INSERTED.id, INSERTED.username, INSERTED.email, INSERTED.created_at
-                VALUES (?, ?, ?)
+                VALUES (%s, %s, %s)
                 """,
                 (user.username, user.email, hashed_password)
             )
@@ -61,7 +62,10 @@ def register_user(user: UserRegister):
             }
             
             # Publish Kafka event
-            event_producer.publish_user_event("USER_REGISTERED", user_data)
+            try:
+                event_producer.publish_user_event("USER_REGISTERED", user_data)
+            except Exception as e:
+                print(f"⚠️ Kafka publish failed: {e}")
             
             return {
                 "message": "User registered successfully",
@@ -80,39 +84,114 @@ def register_user(user: UserRegister):
 @app.post("/login", response_model=TokenResponse)
 def login_user(credentials: UserLogin):
     """
-    Login user and return JWT token
+    Login user and return JWT token (JSON format)
     - Publishes USER_LOGIN event to Kafka
     """
-    with db.get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id, username, email, password_hash FROM users WHERE username = ?",
-            (credentials.username,)
-        )
-        user = cursor.fetchone()
-        
-        if not user or not verify_password(credentials.password, user[3]):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid username or password"
+    try:
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute(
+                "SELECT id, username, email, password_hash FROM users WHERE username = %s",
+                (credentials.username,)
             )
-        
-        # Create JWT token
-        token_data = {"user_id": user[0], "username": user[1]}
-        access_token = create_access_token(token_data)
-        
-        # Publish event
-        event_producer.publish_user_event("USER_LOGIN", {
-            "user_id": user[0],
-            "username": user[1],
-            "email": user[2]
-        })
-        
-        return TokenResponse(
-            access_token=access_token,
-            token_type="bearer",
-            user_id=user[0],
-            username=user[1]
+            
+            user = cursor.fetchone()
+            
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid username or password"
+                )
+            
+            # Verify password
+            if not verify_password(credentials.password, user[3]):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid username or password"
+                )
+            
+            # Create JWT token
+            token_data = {"user_id": user[0], "username": user[1]}
+            access_token = create_access_token(token_data)
+            
+            # Publish event
+            try:
+                event_producer.publish_user_event("USER_LOGIN", {
+                    "user_id": user[0],
+                    "username": user[1],
+                    "email": user[2]
+                })
+            except Exception as e:
+                print(f"Kafka publish failed: {e}")
+            
+            return TokenResponse(
+                access_token=access_token,
+                token_type="bearer",
+                user_id=user[0],
+                username=user[1]
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Login error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login failed: {str(e)}"
+        )
+
+@app.post("/token", response_model=TokenResponse)
+def login_for_swagger(form_data: OAuth2PasswordRequestForm = Depends()):
+    """
+    OAuth2 compatible token login for Swagger UI
+    - Uses form data instead of JSON
+    - Publishes USER_LOGIN event to Kafka
+    """
+    try:
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute(
+                "SELECT id, username, email, password_hash FROM users WHERE username = %s",
+                (form_data.username,)
+            )
+            
+            user = cursor.fetchone()
+            
+            if not user or not verify_password(form_data.password, user[3]):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid username or password",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            
+            # Create JWT token
+            token_data = {"user_id": user[0], "username": user[1]}
+            access_token = create_access_token(token_data)
+            
+            # Publish event
+            try:
+                event_producer.publish_user_event("USER_LOGIN", {
+                    "user_id": user[0],
+                    "username": user[1],
+                    "email": user[2]
+                })
+            except Exception as e:
+                print(f"Kafka publish failed: {e}")
+            
+            return TokenResponse(
+                access_token=access_token,
+                token_type="bearer",
+                user_id=user[0],
+                username=user[1]
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Login error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login failed: {str(e)}"
         )
 
 @app.get("/users/me", response_model=UserResponse)
@@ -120,10 +199,13 @@ def get_current_user(payload: dict = Depends(verify_token)):
     """Get current authenticated user"""
     with db.get_connection() as conn:
         cursor = conn.cursor()
+        
+        # ✅ FIX: Përdor %s jo ?
         cursor.execute(
-            "SELECT id, username, email, created_at FROM users WHERE id = ?",
+            "SELECT id, username, email, created_at FROM users WHERE id = %s",
             (payload["user_id"],)
         )
+        
         user = cursor.fetchone()
         
         if not user:
@@ -141,9 +223,11 @@ def list_users():
     """List all users (for testing/admin)"""
     with db.get_connection() as conn:
         cursor = conn.cursor()
+        
         cursor.execute(
             "SELECT id, username, email, created_at FROM users ORDER BY created_at DESC"
         )
+        
         users = cursor.fetchall()
         
         return {

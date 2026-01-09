@@ -5,7 +5,8 @@ from fastapi import HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordBearer
 from app.config import settings
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+# Changed to "token" for Swagger UI compatibility
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt"""

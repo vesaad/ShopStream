@@ -1,17 +1,15 @@
-import pyodbc
+import pymssql
 from contextlib import contextmanager
 from app.config import settings
 
 class Database:
     @contextmanager
     def get_connection(self):
-        """Context manager for database connections"""
-        conn = pyodbc.connect(
-            f'DRIVER={{ODBC Driver 17 for SQL Server}};'
-            f'SERVER={settings.DB_SERVER};'
-            f'DATABASE={settings.DB_NAME};'
-            f'UID={settings.DB_USER};'
-            f'PWD={settings.DB_PASSWORD}'
+        conn = pymssql.connect(
+            server=settings.DB_SERVER,
+            user=settings.DB_USER,
+            password=settings.DB_PASSWORD,
+            database=settings.DB_NAME
         )
         try:
             yield conn
