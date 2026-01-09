@@ -130,6 +130,21 @@ services:
     networks:
       - shopstream-network
 
+  analytics-service:
+    build: ./services/analytics-service
+    container_name: shopstream_analytics
+    ports:
+      - "8004:8004"
+    environment:
+      MONGO_URI: mongodb://admin:admin123@mongodb:27017/
+      KAFKA_BROKER: kafka:29092
+    depends_on:
+      - mongodb
+      - kafka
+    networks:  
+      - shopstream-network
+    restart: unless-stopped    
+
 volumes:
   mssql_data:
   mongodb_data:
