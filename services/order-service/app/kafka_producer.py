@@ -1,24 +1,39 @@
-# app/kafka_producer.py
-import os
-import json
 from kafka import KafkaProducer
+import json
+from datetime import datetime
+from app.config import settings
 
 class EventProducer:
     def __init__(self):
-        broker = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
-        self.producer = KafkaProducer(
-            bootstrap_servers=[broker],
-            value_serializer=lambda v: json.dumps(v).encode("utf-8")
-        )
+        try:
+            self.producer = KafkaProducer(
+                bootstrap_servers=[settings.KAFKA_BROKER],
+                value_serializer=lambda v: json.dumps(v, default=str).encode('utf-8'),
+                request_timeout_ms=5000,
+                max_block_ms=5000
+            )
+            print("Kafka producer initialized successfully")
+        except Exception as e:
+            print(f"Kafka not available: {e}")
+            self.producer = None
+    
+    def publish_order_event(self, event_type: str, order_data: dict):
+        """Publish order events to Kafka"""
+        if self.producer is None:
+            print(f"Kafka unavailable. Event not published: {event_type}")
+            return
+        
+        try:
+            event = {
+                "event_type": event_type,
+                "data": order_data,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            self.producer.send("order-events", value=event)
+            self.producer.flush()
+            print(f"Published event: {event_type}")
+        except Exception as e:
+            print(f"Failed to publish event: {e}")
 
-    def send(self, topic: str, value: dict):
-        self.producer.send(topic, value)
-        self.producer.flush()
-
-event_producer = None  # <-- mos e krijo këtu
-
-def get_producer():
-    global event_producer
-    if event_producer is None:
-        event_producer = EventProducer()
-    return event_producer
+# Create instance
+event_producer = EventProducer()

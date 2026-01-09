@@ -1,15 +1,23 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    DB_SERVER: str = "localhost"
+    # MS SQL Database configuration for Docker
+    DB_SERVER: str = "mssql"
     DB_USER: str = "SA"
     DB_PASSWORD: str = "YourStrong@Passw0rd"
     DB_NAME: str = "ShopStreamDB"
-
-    KAFKA_BROKER: str = "localhost:9092"
-    PRODUCT_SERVICE_URL: str = "http://localhost:8002"
-
+    
+    # Kafka configuration
+    KAFKA_BROKER: str = "kafka:29092"
+    
+    # Product Service URL
+    PRODUCT_SERVICE_URL: str = "http://product-service:8002"
+    
     class Config:
         env_file = ".env"
+        case_sensitive = True
 
 settings = Settings()
+
+# Debug log
+print("Config loaded: DB_SERVER=" + settings.DB_SERVER)

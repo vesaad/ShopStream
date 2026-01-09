@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
@@ -7,7 +6,7 @@ from datetime import datetime
 
 from app.models import OrderCreate, PaymentCreate
 from app.database import db
-from app.kafka_producer import get_producer
+from app.kafka_producer import event_producer  # FIX: event_producer direkt
 from app.config import settings
 
 app = FastAPI(
@@ -55,11 +54,17 @@ def create_order(order: OrderCreate):
 
                 # inventory
                 inv_r = requests.get(f"{settings.PRODUCT_SERVICE_URL}/inventory/{item.product_id}", timeout=5)
-                inv = inv_r.json()
-                if inv["available"] < item.quantity:
+                if inv_r.status_code == 200:
+                    inv = inv_r.json()
+                    available = inv.get("available", inv.get("stock", 0))
+                else:
+                    # If inventory endpoint doesn't exist, use product stock
+                    available = product.get("stock", 0)
+                
+                if available < item.quantity:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Insufficient stock for {product['name']}. Available: {inv['available']}"
+                        detail=f"Insufficient stock for {product['name']}. Available: {available}"
                     )
 
                 subtotal = product["price"] * item.quantity
@@ -111,14 +116,17 @@ def create_order(order: OrderCreate):
                 pass
 
         # 6) publish kafka event
-        event_producer.publish_order_event("ORDER_CREATED", {
-            "order_id": order_id,
-            "user_id": order.user_id,
-            "items": order_details,
-            "total": float(total),
-            "status": "pending",
-            "created_at": str(created_at)
-        })
+        try:
+            event_producer.publish_order_event("ORDER_CREATED", {
+                "order_id": order_id,
+                "user_id": order.user_id,
+                "items": order_details,
+                "total": float(total),
+                "status": "pending",
+                "created_at": str(created_at)
+            })
+        except Exception as e:
+            print(f"Kafka publish failed: {e}")
 
         return {
             "order_id": order_id,
@@ -131,7 +139,7 @@ def create_order(order: OrderCreate):
 
 # ------------------ LIST ORDERS ------------------
 @app.get("/orders")
-def list_orders(user_id: Optional[int] = None, status: Optional[str] = None):
+def list_orders(user_id: Optional[int] = None, status_filter: Optional[str] = None):
     with db.get_connection() as conn:
         cursor = conn.cursor()
 
@@ -142,15 +150,19 @@ def list_orders(user_id: Optional[int] = None, status: Optional[str] = None):
         if user_id is not None:
             conditions.append("user_id = %s")
             params.append(user_id)
-        if status is not None:
+        if status_filter is not None:
             conditions.append("status = %s")
-            params.append(status)
+            params.append(status_filter)
 
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY created_at DESC"
 
-        cursor.execute(query, params if params else None)
+        if params:
+            cursor.execute(query, tuple(params))
+        else:
+            cursor.execute(query)
+        
         rows = cursor.fetchall()
 
         return {
@@ -189,7 +201,11 @@ def update_order_status(order_id: int, new_status: str):
             raise HTTPException(status_code=404, detail="Order not found")
         conn.commit()
 
-    event_producer.publish_order_event(f"ORDER_{new_status.upper()}", {"order_id": order_id, "status": new_status})
+    try:
+        event_producer.publish_order_event(f"ORDER_{new_status.upper()}", {"order_id": order_id, "status": new_status})
+    except Exception as e:
+        print(f"Kafka publish failed: {e}")
+    
     return {"message": f"Order status updated to {new_status}"}
 
 # ------------------ PAYMENTS ------------------
@@ -224,13 +240,16 @@ def process_payment(payment: PaymentCreate):
         cursor.execute("UPDATE orders SET status = %s WHERE id = %s", ("completed", payment.order_id))
         conn.commit()
 
-        event_producer.publish_order_event("ORDER_COMPLETED", {
-            "order_id": payment.order_id,
-            "payment_id": payment_id,
-            "payment_method": payment.payment_method,
-            "amount": float(payment.amount),
-            "transaction_id": txid
-        })
+        try:
+            event_producer.publish_order_event("ORDER_COMPLETED", {
+                "order_id": payment.order_id,
+                "payment_id": payment_id,
+                "payment_method": payment.payment_method,
+                "amount": float(payment.amount),
+                "transaction_id": txid
+            })
+        except Exception as e:
+            print(f"Kafka publish failed: {e}")
 
         return {
             "payment_id": payment_id,
@@ -241,3 +260,32 @@ def process_payment(payment: PaymentCreate):
             "message": "Payment processed successfully"
         }
 
+@app.get("/payments/{order_id}")
+def get_payment(order_id: int):
+    """Get payment details for order"""
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, payment_method, amount, status, transaction_id, created_at 
+            FROM payments WHERE order_id = %s
+            """,
+            (order_id,)
+        )
+        payment = cursor.fetchone()
+        if not payment:
+            raise HTTPException(status_code=404, detail="Payment not found")
+        
+        return {
+            "id": payment[0],
+            "order_id": order_id,
+            "payment_method": payment[1],
+            "amount": float(payment[2]),
+            "status": payment[3],
+            "transaction_id": payment[4],
+            "created_at": str(payment[5])
+        }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8003)
