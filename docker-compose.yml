@@ -20,8 +20,8 @@ services:
     container_name: shopstream_mongodb
     hostname: mongodb
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_URI: mongodb://admin:admin123@mongodb:27017/
+      KAFKA_BROKER: kafka:29092
     ports:
       - "27017:27017"
     volumes:
@@ -111,6 +111,9 @@ services:
       - "8002:8002"
     networks:
       - shopstream-network
+    environment:
+      MONGO_URI: mongodb://admin:admin123@mongodb:27017/
+      KAFKA_BROKER: kafka:29092  
 
   # ✅ User Service
   user-service:

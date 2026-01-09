@@ -1,19 +1,9 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    # Database
-    DB_SERVER: str = "localhost"
-    DB_USER: str = "SA"
-    DB_PASSWORD: str = "YourStrong@Passw0rd"
-    DB_NAME: str = "ShopStreamDB"
-    
-    # Kafka
-    KAFKA_BROKER: str = "kafka:29092"
-    
-    # Service
-    SERVICE_NAME: str = "product-service"
-    SERVICE_PORT: int = 8002
-    
+    MONGO_URI: str = "mongodb://admin:admin123@mongodb:27017/"  # <-- shiko mongodb, jo mongo
+    KAFKA_BROKER: str = "kafka:29092"  # Nëse po përdor docker-compose network
+
     class Config:
         env_file = ".env"
 

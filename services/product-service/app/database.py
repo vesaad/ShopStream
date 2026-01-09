@@ -1,21 +1,24 @@
-import pyodbc
-from contextlib import contextmanager
-from app.config import settings
+from pymongo import MongoClient
+import os
 
-class Database:
-    @contextmanager
-    def get_connection(self):
-        """Context manager for database connections"""
-        conn = pyodbc.connect(
-            f'DRIVER={{ODBC Driver 17 for SQL Server}};'
-            f'SERVER={settings.DB_SERVER};'
-            f'DATABASE={settings.DB_NAME};'
-            f'UID={settings.DB_USER};'
-            f'PWD={settings.DB_PASSWORD}'
-        )
-        try:
-            yield conn
-        finally:
-            conn.close()
+# Merr URI nga environment
+MONGO_URI = os.getenv(
+    "MONGO_URI",
+    "mongodb://admin:admin123@mongodb:27017/"
+)
 
-db = Database()
+# Krijo client dhe database
+client = MongoClient(MONGO_URI)
+db = client.shopstream
+
+# Krijo objekt mongodb që përdoret në main.py
+class MongoDB:
+    def __init__(self):
+        self.products = db.products
+        self.shopping_carts = db.shopping_carts
+        self.inventory = db.inventory
+
+# Ky është ai që importohet në main.py
+mongodb = MongoDB()
+
+print("✅ MongoDB client initialized")
