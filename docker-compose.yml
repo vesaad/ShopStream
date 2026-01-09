@@ -143,6 +143,21 @@ services:
       - kafka
     networks:  
       - shopstream-network
+    restart: unless-stopped  
+
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: shopstream_gateway
+    ports:
+      - "8000:8000"
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+      - analytics-service
+    networks:
+      - shopstream-network
     restart: unless-stopped    
 
 volumes:
