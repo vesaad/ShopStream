@@ -1,0 +1,14 @@
+apiVersion: 1
+
+datasources:
+  - name: ShopStream Analytics
+    type: simpod-json-datasource
+    access: proxy
+    url: http://analytics-service:8004
+    isDefault: true
+    editable: true
+    jsonData:
+      httpMethod: GET
+      timeout: 60
+    version: 1
+    uid: shopstream-analytics

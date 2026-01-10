@@ -73,10 +73,25 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_INSTALL_PLUGINS: yesoreyeram-infinity-datasource,marcusolsson-static-datasource
+      GF_SERVER_ROOT_URL: http://localhost:3000
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
     volumes:
       - grafana_data:/var/lib/grafana
+      # Mount datasources folder
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      # Mount dashboards provisioning config
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      # Mount actual dashboard JSON files
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     networks:
       - shopstream-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      analytics-service:
+        condition: service_started
+    restart: unless-stopped  
 
   # ✅ Order Service (FastAPI)
   order-service:
@@ -158,7 +173,8 @@ services:
       - analytics-service
     networks:
       - shopstream-network
-    restart: unless-stopped    
+    restart: unless-stopped  
+  
 
 volumes:
   mssql_data:
